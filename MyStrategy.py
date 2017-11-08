@@ -1,14 +1,13 @@
 from collections import deque
 from math import pi
 from statistics import StatisticsError, mean
-from typing import Callable, Deque, Dict
+from typing import Callable, Dict
 
 from model.ActionType import ActionType
 from model.Game import Game
 from model.Move import Move
 from model.Player import Player
 from model.Vehicle import Vehicle
-from model.VehicleType import VehicleType
 from model.VehicleUpdate import VehicleUpdate
 from model.World import World
 
@@ -29,7 +28,7 @@ ACTION_NAME = {
 
 class MyStrategy:
     def __init__(self):
-        self.action_queue = deque()  # type: Deque[Callable[[Move], None]]
+        self.action_queue = deque()
         self.vehicles = {}  # type: Dict[int, Vehicle]
         self.freeze_ticks = 0
         self.last_action_type = 'MOVE'

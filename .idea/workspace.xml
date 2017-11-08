@@ -2,6 +2,7 @@
 <project version="4">
   <component name="ChangeListManager">
     <list default="true" id="99395d8f-c85a-4376-9544-068b7fc2a693" name="Default" comment="">
+      <change type="MODIFICATION" beforePath="$PROJECT_DIR$/.idea/workspace.xml" afterPath="$PROJECT_DIR$/.idea/workspace.xml" />
       <change type="MODIFICATION" beforePath="$PROJECT_DIR$/MyStrategy.py" afterPath="$PROJECT_DIR$/MyStrategy.py" />
     </list>
     <ignored path="python3-cgdk.iws" />
@@ -28,8 +29,8 @@
       <file leaf-file-name="MyStrategy.py" pinned="false" current-in-tab="true">
         <entry file="file://$PROJECT_DIR$/MyStrategy.py">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="405">
-              <caret line="153" column="30" lean-forward="false" selection-start-line="153" selection-start-column="15" selection-end-line="153" selection-end-column="30" />
+            <state relative-caret-position="200">
+              <caret line="10" column="0" lean-forward="false" selection-start-line="10" selection-start-column="0" selection-end-line="10" selection-end-column="0" />
               <folding />
             </state>
           </provider>
@@ -763,8 +764,8 @@
     </entry>
     <entry file="file://$PROJECT_DIR$/MyStrategy.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="405">
-          <caret line="153" column="30" lean-forward="false" selection-start-line="153" selection-start-column="15" selection-end-line="153" selection-end-column="30" />
+        <state relative-caret-position="200">
+          <caret line="10" column="0" lean-forward="false" selection-start-line="10" selection-start-column="0" selection-end-line="10" selection-end-column="0" />
           <folding />
         </state>
       </provider>
