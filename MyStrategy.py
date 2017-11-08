@@ -24,6 +24,7 @@ ACTION_NAME = {
     8: 'ROTATE',
     9: 'SETUP_VEHICLE_PRODUCTION',
 }
+MAX_SPEED = 0.4 * 0.6
 
 
 class MyStrategy:
@@ -107,13 +108,32 @@ class MyStrategy:
         move.right = self.game.world_width
         move.bottom = self.game.world_height
 
+    def move_selected_to(self, move: Move, x: float, y: float):
+        try:
+            selected_x, selected_y = self.get_selected_center()
+        except StatisticsError:
+            return
+        else:
+            move.x = x - selected_x
+            move.y = y - selected_y
+            move.action = ActionType.MOVE
+            move.max_speed = MAX_SPEED
+
     def move_forward(self, move: Move):
         self.reset_freeze()
 
         move.action = ActionType.MOVE
-        move.x = self.world.width
-        move.y = self.world.height
-        move.max_speed = 0.4 * 0.6
+        move.max_speed = MAX_SPEED
+        try:
+            my_x, my_y = self.get_my_center()
+            enemy_vehicle = min(
+                (vehicle for vehicle in self.vehicles.values() if vehicle.player_id != self.me.id),
+                key=(lambda vehicle: vehicle.get_distance_to(my_x, my_y)),
+            )
+        except (ValueError, StatisticsError):
+            self.move_selected_to(move, self.world.width, self.world.height)
+        else:
+            self.move_selected_to(move, enemy_vehicle.x, enemy_vehicle.y)
 
     def rotate(self, move: Move):
         try:
@@ -122,7 +142,7 @@ class MyStrategy:
             return
         else:
             move.action = ActionType.ROTATE
-            move.max_speed = 0.4 * 0.6
+            move.max_speed = MAX_SPEED
             move.angle = pi
             self.reset_freeze()
 
@@ -148,14 +168,10 @@ class MyStrategy:
 
     def shrink_selected(self, move: Move, reset_freeze: bool):
         try:
-            selected_x, selected_y = self.get_selected_center()
             my_x, my_y = self.get_my_center()
+            self.move_selected_to(move, my_x, my_y)
         except StatisticsError:
             return
         else:
-            move.action = ActionType.MOVE
-            move.x = my_x - selected_x
-            move.y = my_y - selected_y
-            move.max_speed = 0.4 * 0.6
             if reset_freeze:
                 self.reset_freeze()
