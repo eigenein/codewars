@@ -1,6 +1,6 @@
 from collections import deque
 from math import pi
-from statistics import mean
+from statistics import StatisticsError, mean
 from typing import Callable, Deque, Dict
 
 from model.ActionType import ActionType
@@ -117,39 +117,46 @@ class MyStrategy:
         move.max_speed = 0.4 * 0.6
 
     def rotate(self, move: Move):
-        self.reset_freeze()
-
-        move.action = ActionType.ROTATE
-        move.x, move.y = self.get_my_center()
-        move.max_speed = 0.4 * 0.6
-        move.angle = pi
-
-    def select_quadrant(self, move: Move, quadrant: int):
-        move.action = ActionType.CLEAR_AND_SELECT
-
-        my_x, my_y = self.get_my_center()
-
-        if quadrant in (1, 2):
-            move.top = 0.0
-            move.bottom = my_y
-        if quadrant in (3, 4):
-            move.top = my_y
-            move.bottom = self.world.height
-        if quadrant in (1, 4):
-            move.right = self.world.width
-            move.left = my_x
-        if quadrant in (2, 3):
-            move.left = 0.0
-            move.right = my_x
-
-    def shrink_selected(self, move: Move, reset_freeze: bool):
-        if reset_freeze:
+        try:
+            move.x, move.y = self.get_my_center()
+        except StatisticsError:
+            return
+        else:
+            move.action = ActionType.ROTATE
+            move.max_speed = 0.4 * 0.6
+            move.angle = pi
             self.reset_freeze()
 
-        selected_x, selected_y = self.get_selected_center()
-        my_x, my_y = self.get_my_center()
+    def select_quadrant(self, move: Move, quadrant: int):
+        try:
+            my_x, my_y = self.get_my_center()
+        except StatisticsError:
+            return
+        else:
+            move.action = ActionType.CLEAR_AND_SELECT
+            if quadrant in (1, 2):
+                move.top = 0.0
+                move.bottom = my_y
+            if quadrant in (3, 4):
+                move.top = my_y
+                move.bottom = self.world.height
+            if quadrant in (1, 4):
+                move.right = self.world.width
+                move.left = my_x
+            if quadrant in (2, 3):
+                move.left = 0.0
+                move.right = my_x
 
-        move.action = ActionType.MOVE
-        move.x = my_x - selected_x
-        move.y = my_y - selected_y
-        move.max_speed = 0.4 * 0.6
+    def shrink_selected(self, move: Move, reset_freeze: bool):
+        try:
+            selected_x, selected_y = self.get_selected_center()
+            my_x, my_y = self.get_my_center()
+        except StatisticsError:
+            return
+        else:
+            move.action = ActionType.MOVE
+            move.x = my_x - selected_x
+            move.y = my_y - selected_y
+            move.max_speed = 0.4 * 0.6
+            if reset_freeze:
+                self.reset_freeze()
