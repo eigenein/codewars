@@ -144,7 +144,6 @@ class MyStrategy:
             return
         else:
             move.action = ActionType.ROTATE
-            move.max_speed = MAX_SPEED
             move.angle = pi
             self.reset_freeze()
 
