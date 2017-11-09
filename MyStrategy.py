@@ -32,7 +32,7 @@ class MyStrategy:
         self.action_queue = deque()
         self.vehicles = {}  # type: Dict[int, Vehicle]
         self.freeze_ticks = 0
-        self.last_action_type = 'MOVE'
+        self.next_action = 'ROTATE'
         self.me = None  # type: Player
         self.world = None  # type: World
         self.game = None  # type: Game
@@ -69,25 +69,27 @@ class MyStrategy:
                 print('[{}] {}({:.2f}, {:.2f})'.format(self.world.tick_index, ACTION_NAME[move.action], move.x, move.y))
             return
 
-        if self.last_action_type == 'MOVE':
+        if self.next_action == 'ROTATE':
             self.schedule(self.select_all)
             self.schedule(self.rotate)
-            self.last_action_type = 'ROTATE'
-        elif self.last_action_type == 'ROTATE':
+            self.next_action = 'SHRINK'
+        elif self.next_action == 'SHRINK':
             for quadrant in (1, 2, 3, 4):
                 self.schedule(lambda move_, quadrant_=quadrant: self.select_quadrant(move_, quadrant_))
                 self.schedule(lambda move_, quadrant_=quadrant: self.shrink_selected(move_, quadrant_ == 4))
-            self.last_action_type = 'SHRINK'
-        elif self.last_action_type == 'SHRINK':
+            self.next_action = 'MOVE'
+        elif self.next_action == 'MOVE':
             self.schedule(self.select_all)
             self.schedule(self.move_forward)
-            self.last_action_type = 'MOVE'
+            density = self.get_density()
+            print("[{}] Density: {:.3f}".format(world.tick_index, density))
+            self.next_action = 'ROTATE' if density < 0.03 else 'MOVE'
 
     def schedule(self, action: Callable[[Move], None]):
         self.action_queue.append(action)
 
     def reset_freeze(self):
-        self.freeze_ticks = 300
+        self.freeze_ticks = 50
 
     def get_my_center(self):
         return (
@@ -175,3 +177,8 @@ class MyStrategy:
         else:
             if reset_freeze:
                 self.reset_freeze()
+
+    def get_density(self):
+        my_vehicles = [vehicle for vehicle in self.vehicles.values() if vehicle.player_id == self.me.id]
+        my_x, my_y = self.get_my_center()
+        return len(my_vehicles) / pi / max(vehicle.get_squared_distance_to(my_x, my_y) for vehicle in my_vehicles)
