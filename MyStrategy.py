@@ -110,7 +110,7 @@ class MyStrategy:
         move.right = self.game.world_width
         move.bottom = self.game.world_height
 
-    def move_selected_to(self, move: Move, x: float, y: float):
+    def move_selected_to(self, move: Move, x: float, y: float, max_speed=MAX_SPEED):
         try:
             selected_x, selected_y = self.get_selected_center()
         except StatisticsError:
@@ -119,7 +119,7 @@ class MyStrategy:
             move.x = x - selected_x
             move.y = y - selected_y
             move.action = ActionType.MOVE
-            move.max_speed = MAX_SPEED
+            move.max_speed = max_speed
 
     def move_forward(self, move: Move):
         self.reset_freeze()
@@ -170,7 +170,7 @@ class MyStrategy:
     def shrink_selected(self, move: Move, reset_freeze: bool):
         try:
             my_x, my_y = self.get_my_center()
-            self.move_selected_to(move, my_x, my_y)
+            self.move_selected_to(move, my_x, my_y, max_speed=1.0)
         except StatisticsError:
             return
         else:
