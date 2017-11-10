@@ -22,7 +22,8 @@ ACTION_NAME = {
     6: 'DISBAND',
     7: 'MOVE',
     8: 'ROTATE',
-    9: 'SETUP_VEHICLE_PRODUCTION',
+    9: 'SCALE',
+    10: 'SETUP_VEHICLE_PRODUCTION',
 }
 MAX_SPEED = 0.4 * 0.6
 
