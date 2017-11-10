@@ -1,5 +1,5 @@
 from collections import deque
-from math import pi, sqrt
+from math import pi
 from statistics import StatisticsError, mean
 from typing import Callable, Dict, Optional, Tuple
 
@@ -167,15 +167,10 @@ class MyStrategy:
         except StatisticsError:
             return
         else:
-            safety_r = 3.0 * sqrt(self.r2)
-            attacker_vehicles = [vehicle for vehicle in self.my_vehicles.values() if vehicle.type != VehicleType.ARRV]
-            dangerous_vehicles = [
-                vehicle
-                for vehicle in self.enemy_vehicles.values()
-                if vehicle.type != VehicleType.ARRV and vehicle.get_distance_to(self.my_x, self.my_y) < safety_r
-            ]
+            my_count = sum(1 for vehicle in self.my_vehicles.values() if vehicle.type != VehicleType.ARRV)
+            enemy_count = sum(1 for vehicle in self.enemy_vehicles.values() if vehicle.type != VehicleType.ARRV)
             move.action = ActionType.MOVE
-            move.max_speed = MAX_SPEED if len(attacker_vehicles) > len(dangerous_vehicles) else 0.0
+            move.max_speed = MAX_SPEED if my_count / enemy_count > 1.1 else 0.001
             move.x = x - selected_x
             move.y = y - selected_y
 
