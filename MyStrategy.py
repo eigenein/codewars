@@ -170,7 +170,7 @@ class MyStrategy:
             my_count = sum(1 for vehicle in self.my_vehicles.values() if vehicle.type != VehicleType.ARRV)
             enemy_count = sum(1 for vehicle in self.enemy_vehicles.values() if vehicle.type != VehicleType.ARRV)
             move.action = ActionType.MOVE
-            move.max_speed = MAX_SPEED if my_count / enemy_count > 0.99 else 0.001
+            move.max_speed = MAX_SPEED if my_count / enemy_count > 0.99 else 0.0001
             move.x = x - selected_x
             move.y = y - selected_y
 
