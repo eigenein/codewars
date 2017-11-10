@@ -1,5 +1,5 @@
 from collections import deque
-from math import pi
+from math import pi, sqrt
 from statistics import StatisticsError, mean
 from typing import Callable, Dict, Optional, Tuple
 
@@ -49,6 +49,7 @@ class MyStrategy:
 
         self.my_x = 0.0
         self.my_y = 0.0
+        self.r2 = 1024.0 * 1024.0
 
     def put_attack_range(self, attacker_type: int, ground_attack_range: Optional[float], aerial_attack_range: Optional[float]):
         for type_ in GROUND_TYPES:
@@ -93,10 +94,8 @@ class MyStrategy:
         if self.freeze_ticks != 0:
             self.freeze_ticks -= 1
 
-        try:
-            self.my_x, self.my_y = self.get_my_center()
-        except StatisticsError:
-            pass
+        self.my_x, self.my_y = self.get_my_center()
+        self.r2 = max(vehicle.get_squared_distance_to(self.my_x, self.my_y) for vehicle in self.my_vehicles.values())
 
         # Check if something has to be done.
         if self.action_queue:
@@ -168,8 +167,15 @@ class MyStrategy:
         except StatisticsError:
             return
         else:
+            safety_r = 3.0 * sqrt(self.r2)
+            attacker_vehicles = [vehicle for vehicle in self.my_vehicles.values() if vehicle.type != VehicleType.ARRV]
+            dangerous_vehicles = [
+                vehicle
+                for vehicle in self.enemy_vehicles.values()
+                if vehicle.type != VehicleType.ARRV and vehicle.get_distance_to(self.my_x, self.my_y) < safety_r
+            ]
             move.action = ActionType.MOVE
-            move.max_speed = MAX_SPEED
+            move.max_speed = MAX_SPEED if len(attacker_vehicles) > len(dangerous_vehicles) else 0.0
             move.x = x - selected_x
             move.y = y - selected_y
 
@@ -195,5 +201,4 @@ class MyStrategy:
         move.factor = 0.1
 
     def get_density(self):
-        my_x, my_y = self.get_my_center()
-        return len(self.my_vehicles.values()) / pi / max(vehicle.get_squared_distance_to(my_x, my_y) for vehicle in self.my_vehicles.values())
+        return len(self.my_vehicles.values()) / pi / self.r2
