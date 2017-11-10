@@ -32,6 +32,7 @@ class MyStrategy:
         self.action_queue = deque()
         self.vehicles = {}  # type: Dict[int, Vehicle]
         self.freeze_ticks = 0
+        self.shrink_count = 0
         self.next_action = 'ROTATE'
         self.me = None  # type: Player
         self.world = None  # type: World
@@ -69,27 +70,28 @@ class MyStrategy:
                 print('[{}] {}({:.2f}, {:.2f})'.format(self.world.tick_index, ACTION_NAME[move.action], move.x, move.y))
             return
 
+        print('[{}] Schedule {}'.format(world.tick_index, self.next_action))
         if self.next_action == 'ROTATE':
             self.schedule(self.select_all)
-            self.schedule(self.rotate)
+            self.schedule(self.rotate_selected)
             self.next_action = 'SHRINK'
         elif self.next_action == 'SHRINK':
-            for quadrant in (1, 2, 3, 4):
-                self.schedule(lambda move_, quadrant_=quadrant: self.select_quadrant(move_, quadrant_))
-                self.schedule(lambda move_, quadrant_=quadrant: self.shrink_selected(move_, quadrant_ == 4))
-            self.next_action = 'MOVE'
+            self.schedule(self.select_all)
+            self.schedule(self.shrink_selected)
+            self.shrink_count += 1
+            self.next_action = 'MOVE' if self.shrink_count > 5 else 'ROTATE'
         elif self.next_action == 'MOVE':
             self.schedule(self.select_all)
             self.schedule(self.move_forward)
             density = self.get_density()
             print("[{}] Density: {:.3f}".format(world.tick_index, density))
-            self.next_action = 'ROTATE' if density < 0.03 else 'MOVE'
+            self.next_action = 'ROTATE' if density < 0.035 else 'MOVE'
 
     def schedule(self, action: Callable[[Move], None]):
         self.action_queue.append(action)
 
-    def reset_freeze(self):
-        self.freeze_ticks = 50
+    def reset_freeze(self, freeze_ticks: int):
+        self.freeze_ticks = freeze_ticks
 
     def get_my_center(self):
         return (
@@ -110,7 +112,7 @@ class MyStrategy:
         move.right = self.game.world_width
         move.bottom = self.game.world_height
 
-    def move_selected_to(self, move: Move, x: float, y: float, max_speed=MAX_SPEED):
+    def move_selected_to(self, move: Move, x: float, y: float):
         try:
             selected_x, selected_y = self.get_selected_center()
         except StatisticsError:
@@ -119,10 +121,9 @@ class MyStrategy:
             move.x = x - selected_x
             move.y = y - selected_y
             move.action = ActionType.MOVE
-            move.max_speed = max_speed
 
     def move_forward(self, move: Move):
-        self.reset_freeze()
+        self.reset_freeze(50)
 
         move.action = ActionType.MOVE
         move.max_speed = MAX_SPEED
@@ -137,7 +138,7 @@ class MyStrategy:
         else:
             self.move_selected_to(move, enemy_vehicle.x, enemy_vehicle.y)
 
-    def rotate(self, move: Move):
+    def rotate_selected(self, move: Move):
         try:
             move.x, move.y = self.get_my_center()
         except StatisticsError:
@@ -145,37 +146,17 @@ class MyStrategy:
         else:
             move.action = ActionType.ROTATE
             move.angle = pi
-            self.reset_freeze()
+            self.reset_freeze(100)
 
-    def select_quadrant(self, move: Move, quadrant: int):
+    def shrink_selected(self, move: Move):
         try:
-            my_x, my_y = self.get_my_center()
+            move.x, move.y = self.get_my_center()
         except StatisticsError:
             return
         else:
-            move.action = ActionType.CLEAR_AND_SELECT
-            if quadrant in (1, 2):
-                move.top = 0.0
-                move.bottom = my_y
-            if quadrant in (3, 4):
-                move.top = my_y
-                move.bottom = self.world.height
-            if quadrant in (1, 4):
-                move.right = self.world.width
-                move.left = my_x
-            if quadrant in (2, 3):
-                move.left = 0.0
-                move.right = my_x
-
-    def shrink_selected(self, move: Move, reset_freeze: bool):
-        try:
-            my_x, my_y = self.get_my_center()
-            self.move_selected_to(move, my_x, my_y, max_speed=1.0)
-        except StatisticsError:
-            return
-        else:
-            if reset_freeze:
-                self.reset_freeze()
+            move.action = ActionType.SCALE
+            move.factor = 0.1
+            self.reset_freeze(50)
 
     def get_density(self):
         my_vehicles = [vehicle for vehicle in self.vehicles.values() if vehicle.player_id == self.me.id]
