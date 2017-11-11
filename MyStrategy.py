@@ -1,8 +1,8 @@
 from collections import deque
 from math import pi
 from random import getrandbits
-from statistics import StatisticsError, mean
-from typing import Callable, Dict, Optional, Tuple
+from statistics import mean
+from typing import Callable, Dict, Iterable, Optional, Tuple
 
 from model.ActionType import ActionType
 from model.Game import Game
@@ -31,6 +31,14 @@ ACTION_NAME = {
 MAX_SPEED = 0.3 * 0.6
 AERIAL_TYPES = (VehicleType.FIGHTER, VehicleType.HELICOPTER)
 GROUND_TYPES = (VehicleType.TANK, VehicleType.IFV, VehicleType.ARRV)
+ALL_TYPES = GROUND_TYPES + AERIAL_TYPES
+CAN_ATTACK = {
+    VehicleType.ARRV: set(),
+    VehicleType.FIGHTER: set(AERIAL_TYPES),
+    VehicleType.HELICOPTER: set(ALL_TYPES),
+    VehicleType.IFV: set(ALL_TYPES),
+    VehicleType.TANK: set(ALL_TYPES),
+}
 
 
 class MyStrategy:
@@ -99,9 +107,10 @@ class MyStrategy:
         # Pre-compute some useful values.
         self.my_x, self.my_y = self.get_my_center()
         self.r2 = max(vehicle.get_squared_distance_to(self.my_x, self.my_y) for vehicle in self.my_vehicles.values())
-        my_attack_count = sum(1 for vehicle in self.my_vehicles.values() if vehicle.type != VehicleType.ARRV)
-        enemy_attack_count = sum(1 for vehicle in self.enemy_vehicles.values() if vehicle.type != VehicleType.ARRV)
-        self.attack_ratio = my_attack_count / enemy_attack_count if enemy_attack_count != 0 else 1000000.0
+
+        my_attacker_count = self.get_attacker_count(self.my_vehicles.values(), self.enemy_vehicles.values())
+        enemy_attacker_count = self.get_attacker_count(self.enemy_vehicles.values(), self.my_vehicles.values())
+        self.attack_ratio = my_attacker_count / enemy_attacker_count if enemy_attacker_count != 0 else 1000000.0
 
         # Check if something has to be done.
         if self.action_queue:
@@ -208,3 +217,8 @@ class MyStrategy:
 
     def get_density(self):
         return len(self.my_vehicles.values()) / pi / self.r2
+
+    @staticmethod
+    def get_attacker_count(attacker_vehicles: Iterable[Vehicle], attacked_vehicles: Iterable[Vehicle]):
+        attacked_types = {vehicle.type for vehicle in attacked_vehicles}
+        return sum(1 for vehicle in attacker_vehicles if CAN_ATTACK[vehicle.type] & attacked_types)
