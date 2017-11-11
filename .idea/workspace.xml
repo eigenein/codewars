@@ -28,8 +28,28 @@
       <file leaf-file-name="MyStrategy.py" pinned="false" current-in-tab="true">
         <entry file="file://$PROJECT_DIR$/MyStrategy.py">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="316">
-              <caret line="172" column="82" lean-forward="false" selection-start-line="172" selection-start-column="82" selection-end-line="172" selection-end-column="82" />
+            <state relative-caret-position="499">
+              <caret line="188" column="12" lean-forward="false" selection-start-line="188" selection-start-column="12" selection-end-line="188" selection-end-column="12" />
+              <folding />
+            </state>
+          </provider>
+        </entry>
+      </file>
+      <file leaf-file-name="local-runner.default.properties" pinned="false" current-in-tab="false">
+        <entry file="file://$PROJECT_DIR$/../local-runner-ru/local-runner.default.properties">
+          <provider selected="true" editor-type-id="text-editor">
+            <state relative-caret-position="228">
+              <caret line="29" column="13" lean-forward="false" selection-start-line="29" selection-start-column="13" selection-end-line="29" selection-end-column="13" />
+              <folding />
+            </state>
+          </provider>
+        </entry>
+      </file>
+      <file leaf-file-name="Runner.py" pinned="false" current-in-tab="false">
+        <entry file="file://$PROJECT_DIR$/Runner.py">
+          <provider selected="true" editor-type-id="text-editor">
+            <state relative-caret-position="217">
+              <caret line="14" column="42" lean-forward="false" selection-start-line="14" selection-start-column="26" selection-end-line="14" selection-end-column="42" />
               <folding />
             </state>
           </provider>
@@ -92,6 +112,7 @@
         <option value="$PROJECT_DIR$/model/Vehicle.py" />
         <option value="$PROJECT_DIR$/Runner.py" />
         <option value="$PROJECT_DIR$/RemoteProcessClient.py" />
+        <option value="$PROJECT_DIR$/../local-runner-ru/local-runner.default.properties" />
         <option value="$PROJECT_DIR$/MyStrategy.py" />
       </list>
     </option>
@@ -476,6 +497,9 @@
   <component name="TypeScriptGeneratedFilesManager">
     <option name="version" value="1" />
   </component>
+  <component name="UnknownFeatures">
+    <option featureType="com.intellij.fileTypeFactory" implementationName="*.properties" />
+  </component>
   <component name="Vcs.Log.UiProperties">
     <option name="RECENTLY_FILTERED_USER_GROUPS">
       <collection />
@@ -782,13 +806,6 @@
       </provider>
     </entry>
     <entry file="file://$USER_HOME$/.PyCharm2016.2/system/python_stubs/981757381/builtins.py" />
-    <entry file="file://$PROJECT_DIR$/Runner.py">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="357">
-          <caret line="21" column="50" lean-forward="false" selection-start-line="21" selection-start-column="50" selection-end-line="21" selection-end-column="50" />
-        </state>
-      </provider>
-    </entry>
     <entry file="file://$PROJECT_DIR$/model/Unit.py">
       <provider selected="true" editor-type-id="text-editor">
         <state relative-caret-position="170">
@@ -856,10 +873,26 @@
         </state>
       </provider>
     </entry>
+    <entry file="file://$PROJECT_DIR$/Runner.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="217">
+          <caret line="14" column="42" lean-forward="false" selection-start-line="14" selection-start-column="26" selection-end-line="14" selection-end-column="42" />
+          <folding />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/../local-runner-ru/local-runner.default.properties">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="228">
+          <caret line="29" column="13" lean-forward="false" selection-start-line="29" selection-start-column="13" selection-end-line="29" selection-end-column="13" />
+          <folding />
+        </state>
+      </provider>
+    </entry>
     <entry file="file://$PROJECT_DIR$/MyStrategy.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="316">
-          <caret line="172" column="82" lean-forward="false" selection-start-line="172" selection-start-column="82" selection-end-line="172" selection-end-column="82" />
+        <state relative-caret-position="499">
+          <caret line="188" column="12" lean-forward="false" selection-start-line="188" selection-start-column="12" selection-end-line="188" selection-end-column="12" />
           <folding />
         </state>
       </provider>

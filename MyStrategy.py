@@ -1,5 +1,6 @@
 from collections import deque
 from math import pi
+from random import getrandbits
 from statistics import StatisticsError, mean
 from typing import Callable, Dict, Optional, Tuple
 
@@ -50,6 +51,7 @@ class MyStrategy:
         self.my_x = 0.0
         self.my_y = 0.0
         self.r2 = 1024.0 * 1024.0
+        self.attack_ratio = 1.0
 
     def put_attack_range(self, attacker_type: int, ground_attack_range: Optional[float], aerial_attack_range: Optional[float]):
         for type_ in GROUND_TYPES:
@@ -94,8 +96,12 @@ class MyStrategy:
         if self.freeze_ticks != 0:
             self.freeze_ticks -= 1
 
+        # Pre-compute some useful values.
         self.my_x, self.my_y = self.get_my_center()
         self.r2 = max(vehicle.get_squared_distance_to(self.my_x, self.my_y) for vehicle in self.my_vehicles.values())
+        my_attack_count = sum(1 for vehicle in self.my_vehicles.values() if vehicle.type != VehicleType.ARRV)
+        enemy_attack_count = sum(1 for vehicle in self.enemy_vehicles.values() if vehicle.type != VehicleType.ARRV)
+        self.attack_ratio = my_attack_count / enemy_attack_count if enemy_attack_count != 0 else 1000000.0
 
         # Check if something has to be done.
         if self.action_queue:
@@ -161,34 +167,39 @@ class MyStrategy:
         if vehicle_type is not None:
             move.vehicle_type = vehicle_type
 
-    def move_selected_to(self, move: Move, x: float, y: float):
-        try:
-            selected_x, selected_y = self.get_selected_center()
-        except StatisticsError:
-            return
-        else:
-            my_count = sum(1 for vehicle in self.my_vehicles.values() if vehicle.type != VehicleType.ARRV)
-            enemy_count = sum(1 for vehicle in self.enemy_vehicles.values() if vehicle.type != VehicleType.ARRV)
-            move.action = ActionType.MOVE
-            move.max_speed = MAX_SPEED if my_count / enemy_count > 0.99 else 0.0001
-            move.x = x - selected_x
-            move.y = y - selected_y
-
     def move_forward(self, move: Move):
-        try:
-            enemy_vehicle = min(
-                (vehicle for vehicle in self.enemy_vehicles.values()),
-                key=(lambda vehicle: vehicle.get_distance_to(self.my_x, self.my_y)),
-            )
-        except ValueError:
-            self.move_selected_to(move, self.world.width, self.world.height)
+        enemy_vehicle = min(
+            (vehicle for vehicle in self.enemy_vehicles.values()),
+            key=(lambda vehicle: vehicle.get_distance_to(self.my_x, self.my_y)),
+        )
+        x, y = enemy_vehicle.x, enemy_vehicle.y
+
+        move.action = ActionType.MOVE
+        move.max_speed = MAX_SPEED
+        if self.attack_ratio > 0.99:
+            # We have enough vehicles, let's attack!
+            move.x = x - self.my_x
+            move.y = y - self.my_y
+        elif len(self.my_vehicles) <= len(self.enemy_vehicles):
+            # We're losing the battle. Let's move left-right until something good happens.
+            move.x = y - self.my_y
+            move.y = -(x - self.my_x)
+            if getrandbits(1):
+                move.x = -move.x
+                move.y = -move.y
         else:
-            self.move_selected_to(move, enemy_vehicle.x, enemy_vehicle.y)
+            # We're winning and we cannot attack. Just stay.
+            move.x = -(x - self.my_x)
+            move.y = -(y - self.my_y)
+            move.max_speed = 0.0001
 
     def rotate_selected(self, move: Move):
-        move.x, move.y = self.my_x, self.my_y
-        move.action = ActionType.ROTATE
-        move.angle = pi
+        if self.attack_ratio > 0.99:
+            move.x, move.y = self.my_x, self.my_y
+            move.action = ActionType.ROTATE
+            move.angle = pi
+        else:
+            move.action = ActionType.NONE
 
     def shrink_selected(self, move: Move):
         move.x, move.y = self.my_x, self.my_y
