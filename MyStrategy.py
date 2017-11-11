@@ -185,22 +185,22 @@ class MyStrategy:
 
         move.action = ActionType.MOVE
         move.max_speed = MAX_SPEED
-        if self.attack_ratio > 0.99:
+        if self.me.score > self.world.get_opponent_player().score:
+            # We're winning. Why take a risk? Slowly go away.
+            move.x = -(x - self.my_x)
+            move.y = -(y - self.my_y)
+            move.max_speed = 0.01
+        elif self.attack_ratio >= 1.0:
             # We have enough vehicles, let's attack!
             move.x = x - self.my_x
             move.y = y - self.my_y
-        elif len(self.my_vehicles) <= len(self.enemy_vehicles):
+        else:
             # We're losing the battle. Let's move left-right until something good happens.
             move.x = y - self.my_y
             move.y = -(x - self.my_x)
             if getrandbits(1):
                 move.x = -move.x
                 move.y = -move.y
-        else:
-            # We're winning and we cannot attack. Just stay.
-            move.x = -(x - self.my_x)
-            move.y = -(y - self.my_y)
-            move.max_speed = 0.0001
 
     def rotate_selected(self, move: Move):
         if self.attack_ratio > 0.99:
