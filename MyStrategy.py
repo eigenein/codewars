@@ -1,5 +1,6 @@
 from collections import deque
 from math import pi, sqrt
+from operator import itemgetter
 from random import getrandbits
 from statistics import mean
 from typing import Callable, Dict, Iterable, Optional, Tuple
@@ -191,11 +192,11 @@ class MyStrategy:
             move.action = ActionType.TACTICAL_NUCLEAR_STRIKE
             move.x = enemy_vehicle.x
             move.y = enemy_vehicle.y
-            move.vehicle_id = min(
-                # Pick the nearest unit to light up.
-                self.my_vehicles.values(),
-                key=(lambda vehicle: vehicle.get_distance_to_unit(enemy_vehicle)),
-            ).id
+            move.vehicle_id = max((
+                vehicle, distance
+                for vehicle, distance in self.get_vehicles_with_distance_to(self.my_vehicles.values(), enemy_vehicle)
+                if distance < vehicle.vision_range
+            ), key=itemgetter(1))[0].id
         else:
             # We're losing the battle. Let's move left-right until something good happens.
             move.x = y - self.my_y
@@ -224,3 +225,7 @@ class MyStrategy:
     def get_attacker_count(attacker_vehicles: Iterable[Vehicle], attacked_vehicles: Iterable[Vehicle]):
         attacked_types = {vehicle.type for vehicle in attacked_vehicles}
         return sum(1 for vehicle in attacker_vehicles if CAN_ATTACK[vehicle.type] & attacked_types)
+
+    @staticmethod
+    def get_vehicles_with_distance_to(vehicles: Iterable[Vehicle], target: Vehicle) -> Iterable[Tuple[Vehicle, float]]:
+        return (vehicle, vehicle.get_distance_to_unit(target) for vehicle in vehicles)
