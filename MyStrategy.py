@@ -172,6 +172,23 @@ class MyStrategy:
         )
         x, y = enemy_vehicle.x, enemy_vehicle.y
 
+        # Nuclear strike logic.
+        if (
+            self.me.remaining_nuclear_strike_cooldown_ticks == 0 and
+            enemy_vehicle.get_distance_to(self.my_x, self.my_y) > self.r
+        ):
+            vehicle, distance = min(
+                self.get_vehicles_with_distance_to(self.my_vehicles.values(), enemy_vehicle),
+                key=itemgetter(1),
+            )
+            if distance < 0.90 * vehicle.vision_range:
+                print('[{}] TACTICAL NUCLEAR STRIKE!'.format(self.world.tick_index))
+                move.action = ActionType.TACTICAL_NUCLEAR_STRIKE
+                move.vehicle_id = vehicle.id
+                move.x = vehicle.x + 0.90 * vehicle.vision_range * (enemy_vehicle.x - vehicle.x) / distance
+                move.y = vehicle.y + 0.90 * vehicle.vision_range * (enemy_vehicle.y - vehicle.y) / distance
+            return
+
         move.action = ActionType.MOVE
         move.max_speed = MAX_SPEED
         if self.me.score > self.world.get_opponent_player().score:
@@ -187,16 +204,6 @@ class MyStrategy:
             # We have enough vehicles or opponent is too far away, let's attack!
             move.x = x - self.my_x
             move.y = y - self.my_y
-        elif self.me.remaining_nuclear_strike_cooldown_ticks == 0:
-            # Let's try to change something with a nuclear strike.
-            move.action = ActionType.TACTICAL_NUCLEAR_STRIKE
-            move.x = enemy_vehicle.x
-            move.y = enemy_vehicle.y
-            move.vehicle_id = max((
-                (vehicle, distance)
-                for vehicle, distance in self.get_vehicles_with_distance_to(self.my_vehicles.values(), enemy_vehicle)
-                if distance < vehicle.vision_range
-            ), key=itemgetter(1))[0].id
         else:
             # We're losing the battle. Let's move left-right until something good happens.
             move.x = y - self.my_y
