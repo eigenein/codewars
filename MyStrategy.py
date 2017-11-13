@@ -188,7 +188,7 @@ class MyStrategy:
                 move.vehicle_id = vehicle.id
                 move.x = vehicle.x + max_distance * (enemy_vehicle.x - vehicle.x) / distance
                 move.y = vehicle.y + max_distance * (enemy_vehicle.y - vehicle.y) / distance
-            return
+                return
 
         move.action = ActionType.MOVE
         move.max_speed = MAX_SPEED
