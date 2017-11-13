@@ -97,9 +97,9 @@ class MyStrategy:
         self.r2 = max(vehicle.get_squared_distance_to(self.my_x, self.my_y) for vehicle in self.my_vehicles.values())
         self.r = sqrt(self.r2)
 
-        my_attacker_count = self.get_attacker_count(self.my_vehicles.values(), self.enemy_vehicles.values())
-        enemy_attacker_count = self.get_attacker_count(self.enemy_vehicles.values(), self.my_vehicles.values())
-        self.attack_ratio = my_attacker_count / enemy_attacker_count if enemy_attacker_count != 0 else 1000000.0
+        my_durability = self.get_attacker_durability(self.my_vehicles.values(), self.enemy_vehicles.values())
+        opponent_durability = self.get_attacker_durability(self.enemy_vehicles.values(), self.my_vehicles.values())
+        self.attack_ratio = my_durability / opponent_durability if opponent_durability != 0 else 1000000.0
 
         # Check if something has to be done.
         if self.action_queue:
@@ -230,9 +230,9 @@ class MyStrategy:
         return len(self.my_vehicles.values()) / pi / self.r2
 
     @staticmethod
-    def get_attacker_count(attacker_vehicles: Iterable[Vehicle], attacked_vehicles: Iterable[Vehicle]):
+    def get_attacker_durability(attacker_vehicles: Iterable[Vehicle], attacked_vehicles: Iterable[Vehicle]):
         attacked_types = {vehicle.type for vehicle in attacked_vehicles}
-        return sum(1 for vehicle in attacker_vehicles if CAN_ATTACK[vehicle.type] & attacked_types)
+        return sum(vehicle.durability for vehicle in attacker_vehicles if CAN_ATTACK[vehicle.type] & attacked_types)
 
     @staticmethod
     def get_vehicles_with_distance_to(vehicles: Iterable[Vehicle], target: Vehicle) -> Iterable[Tuple[Vehicle, float]]:
