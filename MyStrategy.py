@@ -1,5 +1,5 @@
 from collections import deque
-from math import pi
+from math import pi, sqrt
 from random import getrandbits
 from statistics import mean
 from typing import Callable, Dict, Iterable, Optional, Tuple
@@ -14,20 +14,6 @@ from model.VehicleUpdate import VehicleUpdate
 from model.World import World
 
 
-ACTION_NAME = {
-    None: 'None',
-    0: 'NONE',
-    1: 'CLEAR_AND_SELECT',
-    2: 'ADD_TO_SELECTION',
-    3: 'DESELECT',
-    4: 'ASSIGN',
-    5: 'DISMISS',
-    6: 'DISBAND',
-    7: 'MOVE',
-    8: 'ROTATE',
-    9: 'SCALE',
-    10: 'SETUP_VEHICLE_PRODUCTION',
-}
 MAX_SPEED = 0.3 * 0.6
 AERIAL_TYPES = (VehicleType.FIGHTER, VehicleType.HELICOPTER)
 GROUND_TYPES = (VehicleType.TANK, VehicleType.IFV, VehicleType.ARRV)
@@ -58,6 +44,7 @@ class MyStrategy:
 
         self.my_x = 0.0
         self.my_y = 0.0
+        self.r = 1024.0
         self.r2 = 1024.0 * 1024.0
         self.attack_ratio = 1.0
 
@@ -107,6 +94,7 @@ class MyStrategy:
         # Pre-compute some useful values.
         self.my_x, self.my_y = self.get_my_center()
         self.r2 = max(vehicle.get_squared_distance_to(self.my_x, self.my_y) for vehicle in self.my_vehicles.values())
+        self.r = sqrt(self.r2)
 
         my_attacker_count = self.get_attacker_count(self.my_vehicles.values(), self.enemy_vehicles.values())
         enemy_attacker_count = self.get_attacker_count(self.enemy_vehicles.values(), self.my_vehicles.values())
@@ -116,7 +104,7 @@ class MyStrategy:
         if self.action_queue:
             if me.remaining_action_cooldown_ticks == 0 and self.freeze_ticks == 0:
                 self.action_queue.popleft()(move)
-                print('[{}] {}({:.2f}, {:.2f})'.format(self.world.tick_index, ACTION_NAME[move.action], move.x, move.y))
+                print('[{}] {}({:.2f}, {:.2f})'.format(self.world.tick_index, move.action, move.x, move.y))
             return
 
         print('[{}] Next action: {}'.format(world.tick_index, self.next_action))
@@ -147,7 +135,7 @@ class MyStrategy:
             self.schedule(lambda _: self.reset_freeze(50))
             density = self.get_density()
             print("[{}] Density: {:.3f}".format(world.tick_index, density))
-            self.next_action = 'ROTATE' if density < 0.04 else 'MOVE'
+            self.next_action = 'ROTATE' if density < 0.039 else 'MOVE'
 
     def schedule(self, action: Callable[[Move], None]):
         self.action_queue.append(action)
@@ -190,10 +178,24 @@ class MyStrategy:
             move.x = -(x - self.my_x)
             move.y = -(y - self.my_y)
             move.max_speed = 0.01
-        elif self.attack_ratio >= 1.0:
-            # We have enough vehicles, let's attack!
+        elif (
+            self.attack_ratio >= 1.0 or
+            enemy_vehicle.get_distance_to(self.my_x, self.my_y) > self.r + 20.0 or
+            self.world.tick_index > 19000
+        ):
+            # We have enough vehicles or opponent is too far away, let's attack!
             move.x = x - self.my_x
             move.y = y - self.my_y
+        elif self.me.remaining_nuclear_strike_cooldown_ticks == 0:
+            # Let's try to change something with a nuclear strike.
+            move.action = ActionType.TACTICAL_NUCLEAR_STRIKE
+            move.x = enemy_vehicle.x
+            move.y = enemy_vehicle.y
+            move.vehicle_id = min(
+                # Pick the nearest unit to light up.
+                self.my_vehicles.values(),
+                key=(lambda vehicle: vehicle.get_distance_to_unit(enemy_vehicle)),
+            ).id
         else:
             # We're losing the battle. Let's move left-right until something good happens.
             move.x = y - self.my_y
