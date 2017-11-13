@@ -181,12 +181,13 @@ class MyStrategy:
                 self.get_vehicles_with_distance_to(self.my_vehicles.values(), enemy_vehicle),
                 key=itemgetter(1),
             )
-            if distance < 0.90 * vehicle.vision_range:
+            max_distance = 0.90 * vehicle.vision_range
+            if distance < max_distance:
                 print('[{}] TACTICAL NUCLEAR STRIKE!'.format(self.world.tick_index))
                 move.action = ActionType.TACTICAL_NUCLEAR_STRIKE
                 move.vehicle_id = vehicle.id
-                move.x = vehicle.x + 0.90 * vehicle.vision_range * (enemy_vehicle.x - vehicle.x) / distance
-                move.y = vehicle.y + 0.90 * vehicle.vision_range * (enemy_vehicle.y - vehicle.y) / distance
+                move.x = vehicle.x + max_distance * (enemy_vehicle.x - vehicle.x) / distance
+                move.y = vehicle.y + max_distance * (enemy_vehicle.y - vehicle.y) / distance
             return
 
         move.action = ActionType.MOVE
