@@ -193,7 +193,7 @@ class MyStrategy:
             move.x = enemy_vehicle.x
             move.y = enemy_vehicle.y
             move.vehicle_id = max((
-                vehicle, distance
+                (vehicle, distance)
                 for vehicle, distance in self.get_vehicles_with_distance_to(self.my_vehicles.values(), enemy_vehicle)
                 if distance < vehicle.vision_range
             ), key=itemgetter(1))[0].id
@@ -228,4 +228,4 @@ class MyStrategy:
 
     @staticmethod
     def get_vehicles_with_distance_to(vehicles: Iterable[Vehicle], target: Vehicle) -> Iterable[Tuple[Vehicle, float]]:
-        return (vehicle, vehicle.get_distance_to_unit(target) for vehicle in vehicles)
+        return ((vehicle, vehicle.get_distance_to_unit(target)) for vehicle in vehicles)
