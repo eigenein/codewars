@@ -1,6 +1,7 @@
 from collections import deque
-from functools import partialmethod, wraps
-from typing import Any, Callable, Dict
+from enum import IntEnum
+from functools import partial, wraps
+from typing import Dict
 
 from model.ActionType import ActionType
 from model.Game import Game
@@ -11,13 +12,14 @@ from model.VehicleUpdate import VehicleUpdate
 from model.World import World
 
 
-GROUP_ALL = 1
+class Group(IntEnum):
+    ALL = 1
 
 
 def action(func):
     @wraps(func)
     def wrapper(*args, **kwargs):
-        return partialmethod(func, *args, **kwargs)
+        return partial(func, *args, **kwargs)
     return wrapper
 
 
@@ -29,13 +31,13 @@ class MyStrategy:
         self.me = None  # type: Player
         self.world = None  # type: World
         self.game = None  # type: Game
-        self.move = None  # type: Move
+        self.move_ = None  # type: Move
 
     def move(self, me: Player, world: World, game: Game, move: Move):
         self.me = me
         self.world = world
         self.game = game
-        self.move = move
+        self.move_ = move
 
         self.add_new_vehicles()
         self.update_vehicles()
@@ -76,19 +78,22 @@ class MyStrategy:
 
     def setup(self):
         self.schedule_action(self.select_all())
+        self.schedule_action(self.assign_group(Group.ALL))
 
     def make_decisions(self):
         pass
 
     @action
     def select_all(self):
-        self.move.action = ActionType.CLEAR_AND_SELECT
-        self.move.left = 0.0
-        self.move.top = 0.0
-        self.move.right = self.game.world_width
-        self.move.bottom = self.game.world_height
+        self.log_message('select all')
+        self.move_.action = ActionType.CLEAR_AND_SELECT
+        self.move_.left = 0.0
+        self.move_.top = 0.0
+        self.move_.right = self.game.world_width
+        self.move_.bottom = self.game.world_height
 
     @action
-    def assign_group(self, group: int):
-        self.move.action = ActionType.ASSIGN
-        self.move.group = group
+    def assign_group(self, group: Group):
+        self.log_message('assign group {}', group.name)
+        self.move_.action = ActionType.ASSIGN
+        self.move_.group = group
