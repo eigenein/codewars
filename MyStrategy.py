@@ -1,7 +1,9 @@
-from collections import deque
+from collections import defaultdict, deque
 from enum import IntEnum
 from functools import partial, wraps
-from typing import Callable, Dict
+from itertools import combinations, product
+from operator import attrgetter
+from typing import Callable, Dict, Iterable, List, NamedTuple, Set, Tuple
 
 from model.ActionType import ActionType
 from model.Game import Game
@@ -12,12 +14,15 @@ from model.VehicleUpdate import VehicleUpdate
 from model.World import World
 
 
+Cluster = NamedTuple('Cluster', [('vehicles', List[Vehicle]), ('size', float)])
+
+
 class Group(IntEnum):
     """
     Group IDs.
     """
     ALL = 1
-    NUCLEAR_STRIKE_VEHICLE = 2
+    NUCLEAR_STRIKE_VEHICLES_BASE = 2
 
 
 def action(func: Callable) -> Callable:
@@ -33,16 +38,20 @@ def action(func: Callable) -> Callable:
 class MyStrategy:
     def __init__(self):
         self.action_queue = deque()
+
+        unit_tracker = UnitTracker(self)
+
+        self.trackers = (unit_tracker,)
         self.decision_makers = (
             InitialSetupDecisionMaker(self),
-            NuclearStrikeDecisionMaker(self),
+            NuclearStrikeDecisionMaker(self, unit_tracker),
         )
-        self.vehicles = {}  # type: Dict[int, Vehicle]
 
         self.me = None  # type: Player
         self.world = None  # type: World
         self.game = None  # type: Game
         self.move_ = None  # type: Move
+        self.opponent_player_id = None  # type: int
 
     def move(self, me: Player, world: World, game: Game, move: Move):
         """
@@ -52,37 +61,14 @@ class MyStrategy:
         self.world = world
         self.game = game
         self.move_ = move
+        self.opponent_player_id = world.get_opponent_player().id
 
-        self.add_new_vehicles()
-        self.update_vehicles()
-
+        for tracker in self.trackers:
+            tracker.move()
         if self.action_queue:
             self.process_action_queue()
         else:
             self.make_decisions()
-
-    def add_new_vehicles(self):
-        """
-        Add new vehicles on each tick.
-        """
-        for vehicle in self.world.new_vehicles:  # type: Vehicle
-            self.vehicles[vehicle.id] = vehicle
-
-    def update_vehicles(self):
-        """
-        Update vehicles on each tick.
-        """
-        for update in self.world.vehicle_updates:  # type: VehicleUpdate
-            if update.durability != 0:
-                vehicle = self.vehicles[update.id]
-                vehicle.x = update.x
-                vehicle.y = update.y
-                vehicle.durability = update.durability
-                vehicle.groups = update.groups
-                vehicle.selected = update.selected
-                vehicle.remaining_attack_cooldown_ticks = update.remaining_attack_cooldown_ticks
-            else:
-                self.vehicles.pop(update.id, None)
 
     def schedule_action(self, action):
         """
@@ -143,10 +129,123 @@ class InitialSetupDecisionMaker:
         else:
             return False
 
+    def __str__(self):
+        return self.__class__.__name__
+
 
 class NuclearStrikeDecisionMaker:
-    def __init__(self, strategy: MyStrategy):
+    def __init__(self, strategy: MyStrategy, unit_tracker: 'UnitTracker'):
         self.strategy = strategy
+        self.unit_tracker = unit_tracker
 
     def move(self) -> bool:
         pass
+
+    def __str__(self):
+        return self.__class__.__name__
+
+
+class UnitTracker:
+    CELL_SIZE = 16.0
+    CELL_SIZE_SQUARED = CELL_SIZE * CELL_SIZE
+    CELL_COUNT = 64
+    SCAN_RANGE = range(-1, 2)
+    CLUSTERING_COOLDOWN = 60 - 1  # run clustering at least once per N ticks
+
+    def __init__(self, strategy: MyStrategy):
+        self.strategy = strategy
+        self.vehicles = {}  # type: Dict[int, Vehicle]
+        self.cells = defaultdict(dict)  # type: Dict[Tuple[int, int], Dict[int, Vehicle]]
+        self.clusters = []  # type: List[List[Cluster]]
+        self.clustering_cooldown = 0
+
+    def get_cell(self, vehicle: Vehicle) -> Dict[int, Vehicle]:
+        return self.cells[int(vehicle.x // UnitTracker.CELL_SIZE), int(vehicle.y // UnitTracker.CELL_SIZE)]
+
+    def move(self):
+        self.add_new_vehicles()
+        self.update_vehicles()
+        if self.clustering_cooldown == 0:
+            self.clusters = sorted(self.clusterize_opponent_vehicles(), key=attrgetter('size'), reverse=True)
+            self.clustering_cooldown = self.CLUSTERING_COOLDOWN
+            self.strategy.log_message('clusters: {}', [(len(vehicles), size) for vehicles, size in self.clusters])
+        else:
+            self.clustering_cooldown -= 1
+
+    def add_new_vehicles(self):
+        """
+        Add new vehicles on each tick.
+        """
+        for vehicle in self.strategy.world.new_vehicles:  # type: Vehicle
+            self.vehicles[vehicle.id] = vehicle
+            if vehicle.player_id == self.strategy.opponent_player_id:
+                self.get_cell(vehicle)[vehicle.id] = vehicle
+
+    def update_vehicles(self):
+        """
+        Update vehicles on each tick.
+        """
+        for update in self.strategy.world.vehicle_updates:  # type: VehicleUpdate
+            vehicle = self.vehicles[update.id]
+            is_opponent = vehicle.player_id == self.strategy.opponent_player_id
+            if is_opponent:
+                # Pop out from the old cell.
+                self.get_cell(vehicle).pop(vehicle.id, None)
+            if update.durability != 0:
+                vehicle.x = update.x
+                vehicle.y = update.y
+                vehicle.durability = update.durability
+                vehicle.groups = update.groups
+                vehicle.selected = update.selected
+                vehicle.remaining_attack_cooldown_ticks = update.remaining_attack_cooldown_ticks
+                if vehicle.player_id == self.strategy.opponent_player_id:
+                    # Put to the right cell.
+                    self.get_cell(vehicle)[vehicle.id] = vehicle
+            else:
+                self.vehicles.pop(update.id, None)
+                if is_opponent:
+                    # If opponent vehicle is killed, we need to re-run clustering.
+                    self.clustering_cooldown = 0
+
+    def clusterize_opponent_vehicles(self) -> Iterable[Cluster]:
+        """
+        Split opponent vehicles into clusters.
+        """
+        cells = {cell for cell, vehicles in self.cells.items() if vehicles}
+        while cells:
+            vehicles = list(self.bfs(cells, *cells.pop()))
+            if vehicles:
+                yield Cluster(vehicles, self.get_cluster_size(vehicles))
+
+    def bfs(self, cells: Set[Tuple[int, int]], i: int, j: int) -> Iterable[Vehicle]:
+        """
+        Run BFS from the specified cell.
+        """
+        queue = deque([(i, j)])
+        while queue:
+            i, j = queue.popleft()
+            yield from self.cells[i, j].values()
+            for delta_i, delta_j in product(self.SCAN_RANGE, self.SCAN_RANGE):
+                next_i, next_j = i + delta_i, j + delta_j
+                if (next_i, next_j) in cells and self.get_minimum_squared_distance(i, j, next_i, next_j) < self.CELL_SIZE_SQUARED:
+                    cells.remove((next_i, next_j))
+                    queue.append((next_i, next_j))
+
+    def get_minimum_squared_distance(self, i1: int, j1: int, i2: int, j2: int) -> float:
+        """
+        Get minimum squared distance between vehicles in the clusters.
+        """
+        return min(
+            vehicle_1.get_squared_distance_to_unit(vehicle_2)
+            for vehicle_1, vehicle_2 in product(self.cells[i1, j1].values(), self.cells[i2, j2].values())
+        )
+
+    @staticmethod
+    def get_cluster_size(vehicles: Iterable[Vehicle]) -> float:
+        """
+        Get cluster size as the maximum distance between vehicles in the cluster.
+        """
+        return max((
+            vehicle_1.get_distance_to_unit(vehicle_2)
+            for vehicle_1, vehicle_2 in combinations(vehicles, 2)
+        ), default=0.0)
