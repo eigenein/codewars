@@ -146,31 +146,34 @@ class NuclearStrikeDecisionMaker:
 
 
 class UnitTracker:
-    CELL_SIZE = 16.0
-    CELL_SIZE_SQUARED = CELL_SIZE * CELL_SIZE
     CELL_COUNT = 64
+    CELL_SIZE = 1024 / CELL_COUNT
+    CELL_SIZE_SQUARED = CELL_SIZE * CELL_SIZE
     SCAN_RANGE = range(-1, 2)
-    CLUSTERING_COOLDOWN = 60 - 1  # run clustering at least once per N ticks
 
     def __init__(self, strategy: MyStrategy):
         self.strategy = strategy
         self.vehicles = {}  # type: Dict[int, Vehicle]
         self.cells = defaultdict(dict)  # type: Dict[Tuple[int, int], Dict[int, Vehicle]]
-        self.clusters = []  # type: List[List[Cluster]]
-        self.clustering_cooldown = 0
+        self._clusters = None  # type: List[Cluster]
 
-    def get_cell(self, vehicle: Vehicle) -> Dict[int, Vehicle]:
-        return self.cells[int(vehicle.x // UnitTracker.CELL_SIZE), int(vehicle.y // UnitTracker.CELL_SIZE)]
+    @property
+    def clusters(self) -> List[Cluster]:
+        if self._clusters is None:
+            self._clusters = sorted(self.clusterize_opponent_vehicles(), key=attrgetter('size'), reverse=True)
+            self.strategy.log_message('clusters: {}', [(len(vehicles), size) for vehicles, size in self.clusters])
+        return self._clusters
 
     def move(self):
+        self.reset()
         self.add_new_vehicles()
         self.update_vehicles()
-        if self.clustering_cooldown == 0:
-            self.clusters = sorted(self.clusterize_opponent_vehicles(), key=attrgetter('size'), reverse=True)
-            self.clustering_cooldown = self.CLUSTERING_COOLDOWN
-            self.strategy.log_message('clusters: {}', [(len(vehicles), size) for vehicles, size in self.clusters])
-        else:
-            self.clustering_cooldown -= 1
+
+    def reset(self):
+        """
+        Reset all fields that are not refreshed on each tick.
+        """
+        self._clusters = None
 
     def add_new_vehicles(self):
         """
@@ -198,14 +201,11 @@ class UnitTracker:
                 vehicle.groups = update.groups
                 vehicle.selected = update.selected
                 vehicle.remaining_attack_cooldown_ticks = update.remaining_attack_cooldown_ticks
-                if vehicle.player_id == self.strategy.opponent_player_id:
+                if is_opponent:
                     # Put to the right cell.
                     self.get_cell(vehicle)[vehicle.id] = vehicle
             else:
                 self.vehicles.pop(update.id, None)
-                if is_opponent:
-                    # If opponent vehicle is killed, we need to re-run clustering.
-                    self.clustering_cooldown = 0
 
     def clusterize_opponent_vehicles(self) -> Iterable[Cluster]:
         """
@@ -249,3 +249,6 @@ class UnitTracker:
             vehicle_1.get_distance_to_unit(vehicle_2)
             for vehicle_1, vehicle_2 in combinations(vehicles, 2)
         ), default=0.0)
+
+    def get_cell(self, vehicle: Vehicle) -> Dict[int, Vehicle]:
+        return self.cells[int(vehicle.x // UnitTracker.CELL_SIZE), int(vehicle.y // UnitTracker.CELL_SIZE)]
