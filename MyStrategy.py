@@ -3,13 +3,14 @@ from enum import IntEnum
 from functools import partial, wraps
 from itertools import combinations, product
 from operator import attrgetter
-from typing import Callable, Dict, Iterable, List, NamedTuple, Set, Tuple
+from typing import Callable, Dict, Iterable, List, NamedTuple, Optional, Set, Tuple
 
 from model.ActionType import ActionType
 from model.Game import Game
 from model.Move import Move
 from model.Player import Player
 from model.Vehicle import Vehicle
+from model.VehicleType import VehicleType
 from model.VehicleUpdate import VehicleUpdate
 from model.World import World
 
@@ -22,17 +23,12 @@ class Group(IntEnum):
     Group IDs.
     """
     ALL = 1
-    NUCLEAR_STRIKE_VEHICLES_BASE = 2
-
-
-def action(func: Callable) -> Callable:
-    """
-    Makes a parameterless partial when wrapped function is called.
-    """
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        return partial(func, *args, **kwargs)
-    return wrapper
+    ARRV = 2
+    FIGHTER = 3
+    HELICOPTER = 4
+    IFV = 5
+    TANK = 6
+    NUCLEAR_STRIKE_VEHICLE_BASE = 10
 
 
 class MyStrategy:
@@ -70,7 +66,7 @@ class MyStrategy:
         else:
             self.make_decisions()
 
-    def schedule_action(self, action):
+    def schedule_action(self, action: Callable[[], None]):
         """
         Put the action to the queue.
         """
@@ -95,26 +91,50 @@ class MyStrategy:
                 self.log_message('{} made its decision!', decision_maker)
                 break
 
-    @action
-    def select_all(self):
-        """
-        Select all units.
-        """
-        self.log_message('select all')
-        self.move_.action = ActionType.CLEAR_AND_SELECT
-        self.move_.left = 0.0
-        self.move_.top = 0.0
-        self.move_.right = self.game.world_width
-        self.move_.bottom = self.game.world_height
+    def select_all(self, vehicle_type: Optional[VehicleType] = None):
+        def wrapper():
+            self.log_message('select all {}', vehicle_type)
+            self.move_.action = ActionType.CLEAR_AND_SELECT
+            self.move_.left = 0.0
+            self.move_.top = 0.0
+            self.move_.right = self.game.world_width
+            self.move_.bottom = self.game.world_height
+            if vehicle_type is not None:
+                self.move_.vehicle_type = vehicle_type
+        self.schedule_action(wrapper)
 
-    @action
     def assign_group(self, group: Group):
-        """
-        Assign selected units to the group.
-        """
-        self.log_message('assign group {}', group.name)
-        self.move_.action = ActionType.ASSIGN
-        self.move_.group = group
+        def wrapper():
+            self.log_message('assign group {}', group.name)
+            self.move_.action = ActionType.ASSIGN
+            self.move_.group = group
+        self.schedule_action(wrapper)
+
+    def select_group(self, group: Group):
+        def wrapper():
+            self.log_message('select group {}', group.name)
+            self.move_.action = ActionType.CLEAR_AND_SELECT
+            self.move_.group = group
+        self.schedule_action(wrapper)
+
+    def scale(self, x: float, y: float, factor: float):
+        def wrapper():
+            self.log_message('scale around ({}, {}) by {}', x, y, factor)
+            self.move_.action = ActionType.SCALE
+            self.move_.x = x
+            self.move_.y = y
+            self.move_.factor = factor
+        self.schedule_action(wrapper)
+
+    def go(self, offset_x: float, offset_y: float, max_speed: Optional[float] = None):
+        def wrapper():
+            self.log_message('move by ({}, {}) speed {}', offset_x, offset_y, max_speed)
+            self.move_.action = ActionType.MOVE
+            self.move_.x = offset_x
+            self.move_.y = offset_y
+            if max_speed is not None:
+                self.move_.max_speed = max_speed
+        self.schedule_action(wrapper)
 
 
 class InitialSetupDecisionMaker:
@@ -123,8 +143,18 @@ class InitialSetupDecisionMaker:
 
     def move(self) -> bool:
         if self.strategy.world.tick_index == 0:
-            self.strategy.schedule_action(self.strategy.select_all())
-            self.strategy.schedule_action(self.strategy.assign_group(Group.ALL))
+            self.strategy.select_all()
+            self.strategy.assign_group(Group.ALL)
+            self.strategy.select_all(VehicleType.ARRV)
+            self.strategy.assign_group(Group.ARRV)
+            self.strategy.select_all(VehicleType.FIGHTER)
+            self.strategy.assign_group(Group.FIGHTER)
+            self.strategy.select_all(VehicleType.HELICOPTER)
+            self.strategy.assign_group(Group.HELICOPTER)
+            self.strategy.select_all(VehicleType.IFV)
+            self.strategy.assign_group(Group.IFV)
+            self.strategy.select_all(VehicleType.TANK)
+            self.strategy.assign_group(Group.TANK)
             return True
         else:
             return False
