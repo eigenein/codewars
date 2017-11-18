@@ -1,8 +1,7 @@
 from collections import defaultdict, deque
-from enum import IntEnum
-from functools import partial, wraps
 from itertools import combinations, product
 from operator import attrgetter
+from statistics import StatisticsError, mean
 from typing import Callable, Dict, Iterable, List, NamedTuple, Optional, Set, Tuple
 
 from model.ActionType import ActionType
@@ -15,20 +14,11 @@ from model.VehicleUpdate import VehicleUpdate
 from model.World import World
 
 
+VEHICLE_TYPES = {VehicleType.ARRV, VehicleType.FIGHTER, VehicleType.HELICOPTER, VehicleType.IFV, VehicleType.TANK}
+AERIAL_TYPES = {VehicleType.FIGHTER, VehicleType.HELICOPTER}
+GROUND_TYPES = {VehicleType.ARRV, VehicleType.IFV, VehicleType.TANK}
+
 Cluster = NamedTuple('Cluster', [('vehicles', List[Vehicle]), ('size', float)])
-
-
-class Group(IntEnum):
-    """
-    Group IDs.
-    """
-    ALL = 1
-    ARRV = 2
-    FIGHTER = 3
-    HELICOPTER = 4
-    IFV = 5
-    TANK = 6
-    NUCLEAR_STRIKE_VEHICLE_BASE = 10
 
 
 class MyStrategy:
@@ -39,7 +29,7 @@ class MyStrategy:
 
         self.trackers = (unit_tracker,)
         self.decision_makers = (
-            InitialSetupDecisionMaker(self),
+            InitialSetupDecisionMaker(self, unit_tracker),
             NuclearStrikeDecisionMaker(self, unit_tracker),
         )
 
@@ -88,7 +78,6 @@ class MyStrategy:
         """
         for decision_maker in self.decision_makers:
             if decision_maker.move():
-                self.log_message('{} made its decision!', decision_maker)
                 break
 
     def select_all(self, vehicle_type: Optional[VehicleType] = None):
@@ -103,64 +92,55 @@ class MyStrategy:
                 self.move_.vehicle_type = vehicle_type
         self.schedule_action(wrapper)
 
-    def assign_group(self, group: Group):
+    def scale(self, get_center: Callable[[], Tuple[float, float]], factor: float):
         def wrapper():
-            self.log_message('assign group {}', group.name)
-            self.move_.action = ActionType.ASSIGN
-            self.move_.group = group
-        self.schedule_action(wrapper)
-
-    def select_group(self, group: Group):
-        def wrapper():
-            self.log_message('select group {}', group.name)
-            self.move_.action = ActionType.CLEAR_AND_SELECT
-            self.move_.group = group
-        self.schedule_action(wrapper)
-
-    def scale(self, x: float, y: float, factor: float):
-        def wrapper():
-            self.log_message('scale around ({}, {}) by {}', x, y, factor)
             self.move_.action = ActionType.SCALE
-            self.move_.x = x
-            self.move_.y = y
+            self.move_.x, self.move_.y = get_center()
             self.move_.factor = factor
+            self.log_message('scale around ({}, {}) by {}', self.move_.x, self.move_.y, factor)
         self.schedule_action(wrapper)
 
-    def go(self, offset_x: float, offset_y: float, max_speed: Optional[float] = None):
+    def go(self, get_offset: Callable[[], Tuple[float, float]], max_speed: Optional[float] = None):
         def wrapper():
-            self.log_message('move by ({}, {}) speed {}', offset_x, offset_y, max_speed)
             self.move_.action = ActionType.MOVE
-            self.move_.x = offset_x
-            self.move_.y = offset_y
+            self.move_.x, self.move_.y = get_offset()
             if max_speed is not None:
                 self.move_.max_speed = max_speed
+            self.log_message('move by ({}, {}) speed {}', self.move_.x, self.move_.y, max_speed)
         self.schedule_action(wrapper)
 
 
 class InitialSetupDecisionMaker:
-    def __init__(self, strategy: MyStrategy):
+    UNIT_DIAMETER = 4.0
+
+    def __init__(self, strategy: MyStrategy, unit_tracker: 'UnitTracker'):
         self.strategy = strategy
+        self.unit_tracker = unit_tracker
+        self.state = 0
 
     def move(self) -> bool:
-        if self.strategy.world.tick_index == 0:
-            self.strategy.select_all()
-            self.strategy.assign_group(Group.ALL)
-            self.strategy.select_all(VehicleType.ARRV)
-            self.strategy.assign_group(Group.ARRV)
-            self.strategy.select_all(VehicleType.FIGHTER)
-            self.strategy.assign_group(Group.FIGHTER)
-            self.strategy.select_all(VehicleType.HELICOPTER)
-            self.strategy.assign_group(Group.HELICOPTER)
-            self.strategy.select_all(VehicleType.IFV)
-            self.strategy.assign_group(Group.IFV)
-            self.strategy.select_all(VehicleType.TANK)
-            self.strategy.assign_group(Group.TANK)
-            return True
-        else:
+        if self.state == -1:
             return False
+        if self.unit_tracker.am_i_moving:
+            return True
+        if self.state == 0:
+            self.strategy.select_all()
+            self.strategy.go(lambda: (16.0, 16.0))
+            self.set_state(1)
+        elif self.state == 1:
+            self.strategy.select_all()
+            self.strategy.scale(self.unit_tracker.get_selected_center, 1.2)
+            self.set_state(2)
+        elif self.state == 2:
+            for vehicle_type in VEHICLE_TYPES:
+                self.strategy.select_all(vehicle_type)
+                self.strategy.scale(self.unit_tracker.get_selected_center, 1.2)
+            self.set_state(-1)
+        return True
 
-    def __str__(self):
-        return self.__class__.__name__
+    def set_state(self, state: int):
+        self.strategy.log_message('state {}', state)
+        self.state = state
 
 
 class NuclearStrikeDecisionMaker:
@@ -171,28 +151,21 @@ class NuclearStrikeDecisionMaker:
     def move(self) -> bool:
         pass
 
-    def __str__(self):
-        return self.__class__.__name__
-
 
 class UnitTracker:
     CELL_COUNT = 64
     CELL_SIZE = 1024 / CELL_COUNT
     CELL_SIZE_SQUARED = CELL_SIZE * CELL_SIZE
     SCAN_RANGE = range(-1, 2)
+    DELTA = 0.001
 
     def __init__(self, strategy: MyStrategy):
         self.strategy = strategy
         self.vehicles = {}  # type: Dict[int, Vehicle]
         self.cells = defaultdict(dict)  # type: Dict[Tuple[int, int], Dict[int, Vehicle]]
+        self.am_i_moving = False
+        self.is_opponent_moving = False
         self._clusters = None  # type: List[Cluster]
-
-    @property
-    def clusters(self) -> List[Cluster]:
-        if self._clusters is None:
-            self._clusters = sorted(self.clusterize_opponent_vehicles(), key=attrgetter('size'), reverse=True)
-            self.strategy.log_message('clusters: {}', [(len(vehicles), size) for vehicles, size in self.clusters])
-        return self._clusters
 
     def move(self):
         self.reset()
@@ -201,9 +174,16 @@ class UnitTracker:
 
     def reset(self):
         """
-        Reset all fields that are not refreshed on each tick.
+        Reset all fields that are normally not refreshed on each tick.
         """
         self._clusters = None
+
+    @property
+    def clusters(self) -> List[Cluster]:
+        if self._clusters is None:
+            self._clusters = sorted(self.clusterize_opponent_vehicles(), key=attrgetter('size'), reverse=True)
+            self.strategy.log_message('clusters: {}', [(len(vehicles), size) for vehicles, size in self.clusters])
+        return self._clusters
 
     def add_new_vehicles(self):
         """
@@ -218,24 +198,31 @@ class UnitTracker:
         """
         Update vehicles on each tick.
         """
+        self.am_i_moving = False
+        self.is_opponent_moving = False
+
         for update in self.strategy.world.vehicle_updates:  # type: VehicleUpdate
             vehicle = self.vehicles[update.id]
-            is_opponent = vehicle.player_id == self.strategy.opponent_player_id
-            if is_opponent:
-                # Pop out from the old cell.
-                self.get_cell(vehicle).pop(vehicle.id, None)
-            if update.durability != 0:
-                vehicle.x = update.x
-                vehicle.y = update.y
-                vehicle.durability = update.durability
-                vehicle.groups = update.groups
-                vehicle.selected = update.selected
-                vehicle.remaining_attack_cooldown_ticks = update.remaining_attack_cooldown_ticks
-                if is_opponent:
-                    # Put to the right cell.
-                    self.get_cell(vehicle)[vehicle.id] = vehicle
-            else:
+            # Get out the vehicle of the cell.
+            self.get_cell(vehicle).pop(vehicle.id, None)
+            # Pop if killed.
+            if update.durability == 0:
                 self.vehicles.pop(update.id, None)
+                continue
+            # Update attributes.
+            is_moving = abs(vehicle.x - update.x) > self.DELTA or abs(vehicle.y - update.y) > self.DELTA
+            vehicle.x = update.x
+            vehicle.y = update.y
+            vehicle.durability = update.durability
+            vehicle.groups = update.groups
+            vehicle.selected = update.selected
+            vehicle.remaining_attack_cooldown_ticks = update.remaining_attack_cooldown_ticks
+            # Put to the right cell.
+            if vehicle.player_id == self.strategy.opponent_player_id:
+                self.get_cell(vehicle)[vehicle.id] = vehicle
+                self.is_opponent_moving = self.is_opponent_moving or is_moving  # track movement
+            else:
+                self.am_i_moving = self.am_i_moving or is_moving  # track movement
 
     def clusterize_opponent_vehicles(self) -> Iterable[Cluster]:
         """
@@ -282,3 +269,12 @@ class UnitTracker:
 
     def get_cell(self, vehicle: Vehicle) -> Dict[int, Vehicle]:
         return self.cells[int(vehicle.x // UnitTracker.CELL_SIZE), int(vehicle.y // UnitTracker.CELL_SIZE)]
+
+    def get_selected_center(self) -> Tuple[float, float]:
+        try:
+            return (
+                mean(vehicle.x for vehicle in self.vehicles.values() if vehicle.selected),
+                mean(vehicle.y for vehicle in self.vehicles.values() if vehicle.selected),
+            )
+        except StatisticsError:
+            return 0.0, 0.0
