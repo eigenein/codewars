@@ -1,7 +1,8 @@
 from collections import defaultdict, deque
-from itertools import combinations, product
-from operator import attrgetter
-from statistics import StatisticsError, mean
+from itertools import product
+from math import hypot, sqrt
+from random import shuffle
+from statistics import mean
 from typing import Callable, Dict, Iterable, List, NamedTuple, Optional, Set, Tuple
 
 from model.ActionType import ActionType
@@ -18,7 +19,7 @@ VEHICLE_TYPES = {VehicleType.ARRV, VehicleType.FIGHTER, VehicleType.HELICOPTER, 
 AERIAL_TYPES = {VehicleType.FIGHTER, VehicleType.HELICOPTER}
 GROUND_TYPES = {VehicleType.ARRV, VehicleType.IFV, VehicleType.TANK}
 
-Cluster = NamedTuple('Cluster', [('vehicles', List[Vehicle]), ('size', float)])
+Cluster = NamedTuple('Cluster', [('vehicles', List[Vehicle])])
 
 
 class MyStrategy:
@@ -27,10 +28,11 @@ class MyStrategy:
 
         unit_tracker = UnitTracker(self)
 
-        self.trackers = (unit_tracker,)
+        self.pre_trackers = (unit_tracker,)
         self.decision_makers = (
             InitialSetupDecisionMaker(self, unit_tracker),
             NuclearStrikeDecisionMaker(self, unit_tracker),
+            MoveDecisionMaker(self, unit_tracker),
         )
 
         self.me = None  # type: Player
@@ -49,7 +51,7 @@ class MyStrategy:
         self.move_ = move
         self.opponent_player_id = world.get_opponent_player().id
 
-        for tracker in self.trackers:
+        for tracker in self.pre_trackers:
             tracker.move()
         if self.action_queue:
             self.process_action_queue()
@@ -80,19 +82,26 @@ class MyStrategy:
             if decision_maker.move():
                 break
 
-    def select_all(self, vehicle_type: Optional[VehicleType] = None):
+    def select(
+        self,
+        vehicle_type: Optional[int] = None,
+        left: Optional[float] = None,
+        top: Optional[float] = None,
+        right: Optional[float] = None,
+        bottom: Optional[float] = None,
+    ):
         def wrapper():
-            self.log_message('select all {}', vehicle_type)
+            self.log_message('select {} ({}, {})-({}, {})', vehicle_type, left, top, right, bottom)
             self.move_.action = ActionType.CLEAR_AND_SELECT
-            self.move_.left = 0.0
-            self.move_.top = 0.0
-            self.move_.right = self.game.world_width
-            self.move_.bottom = self.game.world_height
+            self.move_.left = 0.0 if left is None else left
+            self.move_.top = 0.0 if top is None else top
+            self.move_.right = self.game.world_width if right is None else right
+            self.move_.bottom = self.game.world_height if bottom is None else bottom
             if vehicle_type is not None:
                 self.move_.vehicle_type = vehicle_type
         self.schedule_action(wrapper)
 
-    def scale(self, get_center: Callable[[], Tuple[float, float]], factor: float):
+    def scale(self, get_center: Callable[[], 'Vector'], factor: float):
         def wrapper():
             self.move_.action = ActionType.SCALE
             self.move_.x, self.move_.y = get_center()
@@ -100,7 +109,7 @@ class MyStrategy:
             self.log_message('scale around ({}, {}) by {}', self.move_.x, self.move_.y, factor)
         self.schedule_action(wrapper)
 
-    def go(self, get_offset: Callable[[], Tuple[float, float]], max_speed: Optional[float] = None):
+    def go(self, get_offset: Callable[[], 'Vector'], max_speed: Optional[float] = None):
         def wrapper():
             self.move_.action = ActionType.MOVE
             self.move_.x, self.move_.y = get_offset()
@@ -109,38 +118,48 @@ class MyStrategy:
             self.log_message('move by ({}, {}) speed {}', self.move_.x, self.move_.y, max_speed)
         self.schedule_action(wrapper)
 
+    def assign(self, group: int):
+        def wrapper():
+            self.log_message('assign {}', group)
+            self.move_.action = ActionType.ASSIGN
+            self.move_.group = group
+        self.schedule_action(wrapper)
+
+    def select_group(self, group: int):
+        def wrapper():
+            self.log_message('select {}', group)
+            self.move_.action = ActionType.CLEAR_AND_SELECT
+            self.move_.group = group
+        self.schedule_action(wrapper)
+
 
 class InitialSetupDecisionMaker:
-    UNIT_DIAMETER = 4.0
-
     def __init__(self, strategy: MyStrategy, unit_tracker: 'UnitTracker'):
         self.strategy = strategy
         self.unit_tracker = unit_tracker
-        self.state = 0
 
     def move(self) -> bool:
-        if self.state == -1:
+        if self.strategy.world.tick_index != 0:
             return False
-        if self.unit_tracker.am_i_moving:
-            return True
-        if self.state == 0:
-            self.strategy.select_all()
-            self.strategy.go(lambda: (16.0, 16.0))
-            self.set_state(1)
-        elif self.state == 1:
-            self.strategy.select_all()
-            self.strategy.scale(self.unit_tracker.get_selected_center, 1.2)
-            self.set_state(2)
-        elif self.state == 2:
-            for vehicle_type in VEHICLE_TYPES:
-                self.strategy.select_all(vehicle_type)
-                self.strategy.scale(self.unit_tracker.get_selected_center, 1.2)
-            self.set_state(-1)
+        for vehicle_type in VEHICLE_TYPES:
+            self.make_groups(vehicle_type)
         return True
 
-    def set_state(self, state: int):
-        self.strategy.log_message('state {}', state)
-        self.state = state
+    def make_groups(self, vehicle_type: int):
+        vehicles = [
+            vehicle for vehicle in self.unit_tracker.vehicles.values()
+            if vehicle.player_id == self.strategy.me.id and vehicle.type == vehicle_type
+        ]
+        x = mean(vehicle.x for vehicle in vehicles)
+        y = mean(vehicle.y for vehicle in vehicles)
+        self.strategy.select(vehicle_type=vehicle_type, right=x, bottom=y)
+        self.strategy.assign(self.unit_tracker.allocate_group())
+        self.strategy.select(vehicle_type=vehicle_type, left=x, bottom=y)
+        self.strategy.assign(self.unit_tracker.allocate_group())
+        self.strategy.select(vehicle_type=vehicle_type, right=x, top=y)
+        self.strategy.assign(self.unit_tracker.allocate_group())
+        self.strategy.select(vehicle_type=vehicle_type, left=x, top=y)
+        self.strategy.assign(self.unit_tracker.allocate_group())
 
 
 class NuclearStrikeDecisionMaker:
@@ -157,33 +176,26 @@ class UnitTracker:
     CELL_SIZE = 1024 / CELL_COUNT
     CELL_SIZE_SQUARED = CELL_SIZE * CELL_SIZE
     SCAN_RANGE = range(-1, 2)
-    DELTA = 0.001
 
     def __init__(self, strategy: MyStrategy):
         self.strategy = strategy
         self.vehicles = {}  # type: Dict[int, Vehicle]
         self.cells = defaultdict(dict)  # type: Dict[Tuple[int, int], Dict[int, Vehicle]]
-        self.am_i_moving = False
-        self.is_opponent_moving = False
-        self._clusters = None  # type: List[Cluster]
+        self.clusters = []  # type: List[Cluster]
+        self.group_vehicles = {}
+        self._groups = []  # type: List[int]
 
     def move(self):
-        self.reset()
         self.add_new_vehicles()
         self.update_vehicles()
+        self.update_groups()
+        if self.strategy.me.remaining_action_cooldown_ticks == 0:
+            self.update_clusters()
 
-    def reset(self):
-        """
-        Reset all fields that are normally not refreshed on each tick.
-        """
-        self._clusters = None
-
-    @property
-    def clusters(self) -> List[Cluster]:
-        if self._clusters is None:
-            self._clusters = sorted(self.clusterize_opponent_vehicles(), key=attrgetter('size'), reverse=True)
-            self.strategy.log_message('clusters: {}', [(len(vehicles), size) for vehicles, size in self.clusters])
-        return self._clusters
+    def allocate_group(self) -> int:
+        group = len(self._groups) + 1
+        self._groups.append(group)
+        return group
 
     def add_new_vehicles(self):
         """
@@ -198,9 +210,6 @@ class UnitTracker:
         """
         Update vehicles on each tick.
         """
-        self.am_i_moving = False
-        self.is_opponent_moving = False
-
         for update in self.strategy.world.vehicle_updates:  # type: VehicleUpdate
             vehicle = self.vehicles[update.id]
             # Get out the vehicle of the cell.
@@ -210,7 +219,6 @@ class UnitTracker:
                 self.vehicles.pop(update.id, None)
                 continue
             # Update attributes.
-            is_moving = abs(vehicle.x - update.x) > self.DELTA or abs(vehicle.y - update.y) > self.DELTA
             vehicle.x = update.x
             vehicle.y = update.y
             vehicle.durability = update.durability
@@ -220,11 +228,19 @@ class UnitTracker:
             # Put to the right cell.
             if vehicle.player_id == self.strategy.opponent_player_id:
                 self.get_cell(vehicle)[vehicle.id] = vehicle
-                self.is_opponent_moving = self.is_opponent_moving or is_moving  # track movement
-            else:
-                self.am_i_moving = self.am_i_moving or is_moving  # track movement
 
-    def clusterize_opponent_vehicles(self) -> Iterable[Cluster]:
+    def update_clusters(self):
+        self.clusters = sorted(self.split_opponent_vehicles(), key=(lambda cluster: len(cluster.vehicles)), reverse=True)
+        self.strategy.log_message('clusters: {}', [len(cluster.vehicles) for cluster in self.clusters])
+
+    def update_groups(self):
+        self.group_vehicles = defaultdict(list)
+        for vehicle in self.vehicles.values():
+            if vehicle.player_id == self.strategy.me.id:
+                for group in vehicle.groups:
+                    self.group_vehicles[group].append(vehicle)
+
+    def split_opponent_vehicles(self) -> Iterable[Cluster]:
         """
         Split opponent vehicles into clusters.
         """
@@ -232,7 +248,7 @@ class UnitTracker:
         while cells:
             vehicles = list(self.bfs(cells, *cells.pop()))
             if vehicles:
-                yield Cluster(vehicles, self.get_cluster_size(vehicles))
+                yield Cluster(vehicles)
 
     def bfs(self, cells: Set[Tuple[int, int]], i: int, j: int) -> Iterable[Vehicle]:
         """
@@ -257,24 +273,108 @@ class UnitTracker:
             for vehicle_1, vehicle_2 in product(self.cells[i1, j1].values(), self.cells[i2, j2].values())
         )
 
-    @staticmethod
-    def get_cluster_size(vehicles: Iterable[Vehicle]) -> float:
-        """
-        Get cluster size as the maximum distance between vehicles in the cluster.
-        """
-        return max((
-            vehicle_1.get_distance_to_unit(vehicle_2)
-            for vehicle_1, vehicle_2 in combinations(vehicles, 2)
-        ), default=0.0)
-
     def get_cell(self, vehicle: Vehicle) -> Dict[int, Vehicle]:
         return self.cells[int(vehicle.x // UnitTracker.CELL_SIZE), int(vehicle.y // UnitTracker.CELL_SIZE)]
 
-    def get_selected_center(self) -> Tuple[float, float]:
-        try:
-            return (
-                mean(vehicle.x for vehicle in self.vehicles.values() if vehicle.selected),
-                mean(vehicle.y for vehicle in self.vehicles.values() if vehicle.selected),
-            )
-        except StatisticsError:
-            return 0.0, 0.0
+    def get_group_center(self, group: int) -> 'Vector':
+        return Vector(
+            mean(vehicle.x for vehicle in self.group_vehicles[group]),
+            mean(vehicle.y for vehicle in self.group_vehicles[group]),
+        )
+
+    def get_cluster_center(self, index: int) -> 'Vector':
+        cluster = self.clusters[index]
+        return Vector(
+            mean(vehicle.x for vehicle in cluster.vehicles),
+            mean(vehicle.y for vehicle in cluster.vehicles),
+        )
+
+
+class MoveDecisionMaker:
+    def __init__(self, strategy: MyStrategy, unit_tracker: UnitTracker):
+        self.strategy = strategy
+        self.unit_tracker = unit_tracker
+
+    def move(self):
+        group_centers = {
+            group: self.unit_tracker.get_group_center(group)
+            for group in self.unit_tracker.group_vehicles
+        }  # type: Dict[int, Vector]
+        cluster_centers = {
+            index: self.unit_tracker.get_cluster_center(index)
+            for index, _ in enumerate(self.unit_tracker.clusters)
+        }  # type: Dict[int, Vector]
+
+        groups = list(self.unit_tracker.group_vehicles)
+        shuffle(groups)
+
+        group_forces = {}  # type: Dict[int, Vector]
+        # Compute forces.
+        for group in groups:
+            center = group_centers[group]
+            force = Vector.zero()
+            for another_group, another_center in group_centers.items():
+                if group == another_group:
+                    continue
+                # Repulsed by other groups.
+                force -= 50.0 * (another_center - center).force
+            for cluster_index, cluster_center in cluster_centers.items():
+                # Attracted by clusters.
+                force += len(self.unit_tracker.clusters[cluster_index].vehicles) * (cluster_center - center).force
+            group_forces[group] = force
+        # Perform movements.
+        for group in groups:
+            self.strategy.select_group(group)
+            self.strategy.go((lambda force_=group_forces[group].unit: 32.0 * force_), max_speed=0.18)
+
+        return True
+
+
+class Vector(NamedTuple('Vector', [('x', float), ('y', float)])):
+    @staticmethod
+    def zero() -> 'Vector':
+        return Vector(0.0, 0.0)
+
+    def __add__(self, other: 'Vector') -> 'Vector':
+        return Vector(self.x + other.x, self.y + other.y)
+
+    def __sub__(self, other: 'Vector') -> 'Vector':
+        return Vector(self.x - other.x, self.y - other.y)
+
+    def __mul__(self, other: float) -> 'Vector':
+        return Vector(self.x * other, self.y * other)
+
+    def __rmul__(self, other: float) -> 'Vector':
+        return self * other
+
+    def __truediv__(self, other: float) -> 'Vector':
+        return Vector(self.x / other, self.y / other)
+
+    def __neg__(self) -> 'Vector':
+        return Vector(-self.x, -self.y)
+
+    @property
+    def length_squared(self) -> float:
+        return hypot(self.x, self.y)
+
+    @property
+    def length(self) -> float:
+        return sqrt(self.length_squared)
+
+    @property
+    def unit(self) -> 'Vector':
+        return self / self.length
+
+    @property
+    def just_x(self) -> 'Vector':
+        return Vector(self.x, 0.0)
+
+    @property
+    def just_y(self) -> 'Vector':
+        return Vector(0.0, self.y)
+
+    @property
+    def force(self) -> 'Vector':
+        length_squared = self.length_squared
+        length = sqrt(length_squared)
+        return self / length / length_squared
