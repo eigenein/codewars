@@ -1,7 +1,7 @@
 from collections import defaultdict, deque
 from itertools import product
 from math import hypot
-from random import uniform
+from random import choice
 from statistics import mean
 from typing import Callable, Dict, Iterable, List, NamedTuple, Optional, Set, Tuple
 
@@ -28,6 +28,7 @@ Cluster = NamedTuple('Cluster', [('vehicles', List[Vehicle]), ('x', float), ('y'
 class MyStrategy:
     def __init__(self):
         self.action_queue = deque()
+        self.next_action_tick = 0
 
         unit_tracker = UnitTracker(self)
 
@@ -71,8 +72,10 @@ class MyStrategy:
         """
         Process the next action if possible.
         """
-        if self.me.remaining_action_cooldown_ticks == 0:
+        if self.next_action_tick <= self.world.tick_index:
+            assert self.me.remaining_action_cooldown_ticks == 0, self.me.remaining_action_cooldown_ticks
             self.action_queue.popleft()()
+            self.next_action_tick = self.world.tick_index + 5
 
     def log_message(self, message: str, *args, **kwargs):
         print('[{}] {}'.format(self.world.tick_index, message.format(*args, **kwargs)))
@@ -163,14 +166,9 @@ class SpreadOutDecisionMaker:
         self.unit_tracker = unit_tracker
 
     def move(self) -> bool:
-        x = uniform(
-            min(vehicle.x for vehicle in self.unit_tracker.my_vehicles),
-            max(vehicle.x for vehicle in self.unit_tracker.my_vehicles)
-        )
-        y = uniform(
-            min(vehicle.y for vehicle in self.unit_tracker.my_vehicles),
-            max(vehicle.y for vehicle in self.unit_tracker.my_vehicles)
-        )
+        vehicle = choice(list(self.unit_tracker.my_vehicles))
+        x = vehicle.x
+        y = vehicle.y
         if x < 512:
             left = x
             right = x + self.SQUARE_SIZE
