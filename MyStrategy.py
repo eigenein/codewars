@@ -135,7 +135,7 @@ class MyStrategy:
             self.schedule(lambda move_: self.select_all(move_, vehicle_type=VehicleType.FIGHTER))
             self.schedule(lambda move_: self.select_all(move_, vehicle_type=VehicleType.HELICOPTER, add_to_selection=True))
             self.schedule(self.rotate_selected)
-            self.schedule(lambda _: self.reset_freeze(100))
+            self.schedule(lambda _: self.reset_freeze(50))
             self.rotate_angle *= -1
             self.next_action = 'SHRINK'
         elif self.next_action == 'SHRINK':
@@ -248,7 +248,7 @@ class MyStrategy:
         move.action = ActionType.SCALE
         move.x = x
         move.y = y
-        move.factor = 10.0
+        move.factor = 1.5
 
     def get_density(self):
         return len(self.my_vehicles.values()) / pi / self.r2
