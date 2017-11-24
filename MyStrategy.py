@@ -231,12 +231,9 @@ class MyStrategy:
                 move.y = -move.y
 
     def rotate_selected(self, move: Move):
-        if self.attack_ratio > 0.99:
-            move.x, move.y = self.my_x, self.my_y
-            move.action = ActionType.ROTATE
-            move.angle = self.rotate_angle
-        else:
-            move.action = ActionType.NONE
+        move.x, move.y = self.my_x, self.my_y
+        move.action = ActionType.ROTATE
+        move.angle = self.rotate_angle
 
     def shrink_selected(self, move: Move):
         move.x, move.y = self.my_x, self.my_y
