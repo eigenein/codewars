@@ -17,7 +17,6 @@ from model.WeatherType import WeatherType
 from model.World import World
 
 
-MAX_SPEED = 0.3 * 0.6
 AERIAL_TYPES = (VehicleType.FIGHTER, VehicleType.HELICOPTER)
 GROUND_TYPES = (VehicleType.TANK, VehicleType.IFV, VehicleType.ARRV)
 ALL_TYPES = GROUND_TYPES + AERIAL_TYPES
@@ -209,7 +208,7 @@ class MyStrategy:
                 return
 
         move.action = ActionType.MOVE
-        move.max_speed = MAX_SPEED
+        move.max_speed = self.get_max_speed()
         if self.me.score > self.world.get_opponent_player().score:
             # We're winning. Why take a risk? Slowly go away.
             move.x = -(x - self.my_x)
@@ -273,6 +272,9 @@ class MyStrategy:
             if weather == WeatherType.CLEAR:
                 return vehicle.vision_range * self.game.clear_weather_vision_factor
         return vehicle.vision_range  # unreachable
+
+    def get_max_speed(self) -> float:
+        return min(0.3 * vehicle.max_speed for vehicle in self.my_vehicles.values())
 
     @staticmethod
     def get_attacker_durability(attacker_vehicles: Iterable[Vehicle], attacked_vehicles: Iterable[Vehicle]):
